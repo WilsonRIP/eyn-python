@@ -3,17 +3,13 @@ from __future__ import annotations
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Dict, List, Mapping, Sequence
 
 from eyn_python.logging import get_logger
 from eyn_python.utils import run, which
 
 log = get_logger(__name__)
 
-
-# -----------------------------
-# Platform helpers
-# -----------------------------
 
 def is_macos() -> bool:
     return sys.platform == "darwin"
@@ -27,14 +23,7 @@ def is_linux() -> bool:
     return sys.platform.startswith("linux")
 
 
-# -----------------------------
-# Known browsers
-# -----------------------------
-
 def get_common_browser_app_names(include_extended: bool = True) -> list[str]:
-    """
-    Canonical human-facing app names. We map them to process/exe names per-OS.
-    """
     base = [
         "Safari",
         "Google Chrome",
@@ -60,25 +49,21 @@ def get_common_browser_app_names(include_extended: bool = True) -> list[str]:
 
 
 def _windows_exe_map() -> Mapping[str, str]:
-    """
-    Map canonical names to their common Windows image names.
-    """
     return {
         "Google Chrome": "chrome.exe",
         "Microsoft Edge": "msedge.exe",
         "Brave Browser": "brave.exe",
         "Firefox": "firefox.exe",
         "Opera": "opera.exe",
-        "Opera GX": "opera.exe",  # OperaGX often shares opera.exe
+        "Opera GX": "opera.exe",
         "Vivaldi": "vivaldi.exe",
         "Chromium": "chromium.exe",
-        "Arc": "arc.exe",          # common packaging
-        "Yandex": "browser.exe",   # Yandex Browser
+        "Arc": "arc.exe",
+        "Yandex": "browser.exe",
         "LibreWolf": "librewolf.exe",
         "Waterfox": "waterfox.exe",
         "DuckDuckGo": "duckduckgo.exe",
-        "Tor Browser": "firefox.exe",  # Tor bundles a firefox build
-        # Safari/Orion are macOS-only; map to safe defaults if asked
+        "Tor Browser": "firefox.exe",
         "Safari": "safari.exe",
         "Orion": "orion.exe",
         "Opera Beta": "opera_beta.exe",
@@ -86,13 +71,7 @@ def _windows_exe_map() -> Mapping[str, str]:
 
 
 def _posix_match_patterns_for(name: str) -> tuple[str, ...]:
-    """
-    Patterns suitable for pgrep/pkill -f/-i matching on macOS/Linux.
-    Keep these generous to cover helper processes.
-    """
     patterns: List[str] = [name]
-
-    # Add common process names
     alt = {
         "Google Chrome": ("Google Chrome", "chrome"),
         "Microsoft Edge": ("Microsoft Edge", "msedge", "edge"),
@@ -111,13 +90,9 @@ def _posix_match_patterns_for(name: str) -> tuple[str, ...]:
         "Tor Browser": ("Tor Browser", "tor-browser", "firefox"),
         "DuckDuckGo": ("DuckDuckGo", "duckduckgo"),
     }
-    patterns = list(dict.fromkeys(alt.get(name, (name,))))  # unique, preserve order
+    patterns = list(dict.fromkeys(alt.get(name, (name,))))
     return tuple(patterns)
 
-
-# -----------------------------
-# Shell helpers (POSIX)
-# -----------------------------
 
 def _have(cmd: str) -> bool:
     try:
@@ -142,7 +117,7 @@ def _pgrep_pids(pattern: str) -> list[int]:
     out = (cp.stdout or "").strip()
     if not out:
         return []
-    pids: List[int] = []
+    pids: list[int] = []
     for tok in out.split():
         try:
             pids.append(int(tok))
@@ -170,16 +145,11 @@ def _pkill(pattern: str, force: bool) -> None:
     run(["pkill", sig, "-if", pattern], check=False)
 
 
-# -----------------------------
-# Windows helpers
-# -----------------------------
-
 def _win_tasklist_has(image_name: str) -> bool:
     if not _have("tasklist"):
         return False
     cp = run(["tasklist", "/FI", f"IMAGENAME eq {image_name}", "/FO", "CSV", "/NH"], check=False)
     out = (cp.stdout or "").strip().strip('"')
-    # tasklist returns "INFO: No tasks are running..." when not found
     return bool(out) and not out.upper().startswith("INFO:")
 
 
@@ -191,10 +161,6 @@ def _taskkill_windows(image_name: str, force: bool) -> None:
         args.insert(2, "/F")
     run(args, check=False)
 
-
-# -----------------------------
-# Results / reporting
-# -----------------------------
 
 @dataclass(frozen=True)
 class AppCloseReport:
@@ -213,16 +179,11 @@ class CloseResult:
     attempted: list[str]
     closed: list[str]
     forced: list[str]
-    # Extended UX fields (non-breaking defaults)
     not_running: list[str] = field(default_factory=list)
     still_running: list[str] = field(default_factory=list)
     errors: Dict[str, str] = field(default_factory=dict)
     reports: list[AppCloseReport] = field(default_factory=list)
 
-
-# -----------------------------
-# Core
-# -----------------------------
 
 def close_browsers(
     apps: Sequence[str] | None = None,
@@ -233,19 +194,6 @@ def close_browsers(
     exclude: Sequence[str] | None = None,
     only_if_running: bool = True,
 ) -> CloseResult:
-    """
-    Close common web browsers across macOS, Linux, and Windows.
-
-    UX improvements:
-      - Graceful first; escalate to force if requested and still running.
-      - Dry-run preview.
-      - Exclude certain apps.
-      - Only act if running (when only_if_running=True).
-      - Detailed per-app reporting.
-
-    Returns CloseResult with backward-compatible fields (attempted, closed, forced)
-    plus richer details (not_running, still_running, errors, reports).
-    """
     targets = list(apps or get_common_browser_app_names())
     if exclude:
         excl = set(exclude)
@@ -256,11 +204,10 @@ def close_browsers(
     not_running: list[str] = []
     still_running: list[str] = []
     errors: Dict[str, str] = {}
-    reports: List[AppCloseReport] = []
+    reports: List[AppCloseReport] = []  # type: ignore[name-defined]
 
     start_deadline = time.time() + max(0.0, timeout_seconds)
 
-    # Helper: wait predicate loop
     def _wait_until(predicate, remaining_time: float, step: float = 0.2) -> None:
         end = time.time() + max(0.0, remaining_time)
         while time.time() < end:
@@ -279,7 +226,6 @@ def close_browsers(
         for name in targets:
             patterns = _posix_match_patterns_for(name)
 
-            # Running check
             running_now = any(_pgrep_any(p) for p in patterns) if have_pgrep else False
             if not running_now and only_if_running:
                 not_running.append(name)
@@ -310,15 +256,12 @@ def close_browsers(
 
             try:
                 if is_macos():
-                    # Graceful via AppleScript
                     _osascript_quit(name)
                 else:
-                    # Linux: TERM first
                     if have_pkill:
                         for p in patterns:
                             _pkill(p, force=False)
 
-                # Wait remaining time slice for this app
                 def _none_running() -> bool:
                     return not any(_pgrep_any(p) for p in patterns) if have_pgrep else True
 
@@ -330,9 +273,7 @@ def close_browsers(
                     closed.append(name)
                     closed_graceful = True
                 elif force:
-                    # Force escalation
                     if is_macos():
-                        # Try killall on app name and pkill patterns
                         _killall(name)
                         for p in patterns:
                             _pkill(p, force=True)
@@ -340,7 +281,6 @@ def close_browsers(
                         for p in patterns:
                             _pkill(p, force=True)
 
-                    # Re-check
                     def _none_running_after_force() -> bool:
                         return not any(_pgrep_any(p) for p in patterns) if have_pgrep else True
 
@@ -351,10 +291,9 @@ def close_browsers(
                     else:
                         still_running.append(name)
                 else:
-                    # Not forced; still running
                     still_running.append(name)
 
-            except Exception as exc:  # defensive: never explode caller apps
+            except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 errors[name] = error_msg
                 log.exception("Failed to close %s", name)
@@ -408,7 +347,6 @@ def close_browsers(
             error_msg: str | None = None
 
             try:
-                # Graceful first (no /F)
                 _taskkill_windows(exe, force=False)
 
                 def _gone() -> bool:
@@ -416,7 +354,6 @@ def close_browsers(
 
                 remaining_for_app = max(0.0, start_deadline - time.time())
                 if remaining_for_app > 0:
-                    # poll up to the per-call remaining budget
                     end = time.time() + remaining_for_app
                     while time.time() < end and not _gone():
                         time.sleep(0.2)
@@ -426,7 +363,6 @@ def close_browsers(
                     closed_graceful = True
                 elif force:
                     _taskkill_windows(exe, force=True)
-                    # brief final check
                     end2 = time.time() + 2.0
                     while time.time() < end2 and not _gone():
                         time.sleep(0.2)
@@ -438,7 +374,7 @@ def close_browsers(
                 else:
                     still_running.append(name)
 
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 error_msg = f"{type(exc).__name__}: {exc}"
                 errors[name] = error_msg
                 log.exception("Failed to close %s", name)
@@ -465,3 +401,5 @@ def close_browsers(
         errors=errors,
         reports=reports,
     )
+
+

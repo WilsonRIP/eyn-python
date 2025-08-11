@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import typer
 
@@ -11,9 +11,9 @@ from eyn_python.download.youtube import DownloadJob, download
 from eyn_python.convert.core import plan_conversions, convert_all
 from eyn_python.media import ffprobe_json, extract_audio, trim_media, AudioExtractOptions
 from eyn_python.scrape import HttpClient, AsyncHttpClient, parse_html, extract_all, extract_links, crawl, crawl_async, fetch_sitemap_urls, search_async
-from eyn_python.archive import ArchiveSettings, create_archive, extract_archive
+from eyn_python.archive import ArchiveSettings, ArchiveFormat, create_archive, extract_archive
 from eyn_python.clean import CleanSettings, clean as clean_run
-from eyn_python.system import close_browsers, get_common_browser_app_names
+from eyn_python.system import close_browsers, get_common_browser_app_names, detect_specs, network_info
 
 app = typer.Typer(
     name="eyn",
@@ -354,7 +354,11 @@ def archive_compress(
     recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="Recurse directories."),
     exclude: list[str] = typer.Option([], "--exclude", help="Glob patterns to exclude (repeatable)."),
 ) -> None:
-    settings = ArchiveSettings(format=format, level=level, recursive=recursive, exclude=exclude)
+    allowed_formats = {"zip", "tar", "tar.gz", "tar.bz2", "tar.xz"}
+    if format not in allowed_formats:
+        raise typer.BadParameter(f"Invalid format: {format}. Choose one of: {', '.join(sorted(allowed_formats))}")
+    fmt: ArchiveFormat = cast(ArchiveFormat, format)
+    settings = ArchiveSettings(format=fmt, level=level, recursive=recursive, exclude=exclude)
     dst = create_archive(src, out, settings)
     console().print(f"Saved -> {dst}")
 
@@ -366,6 +370,19 @@ def archive_extract(
 ) -> None:
     dst = extract_archive(archive, out)
     console().print(f"Extracted -> {dst}")
+
+# ---- System info --------------------------------------------------------------
+
+@app.command("specs")
+def specs_cmd() -> None:
+    """Show basic system specs (CPU, memory, disk)."""
+    console().print_json(data=detect_specs())
+
+
+@app.command("netinfo")
+def netinfo_cmd() -> None:
+    """Show network interfaces and traffic counters."""
+    console().print_json(data=network_info())
 
 if __name__ == "__main__":
     app()

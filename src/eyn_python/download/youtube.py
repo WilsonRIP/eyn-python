@@ -9,7 +9,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 from eyn_python.logging import get_logger
-from eyn_python.paths import ensure_dir
+from eyn_python.paths import ensure_dir, user_downloads_dir
 from eyn_python.config import DownloadSettings
 
 log = get_logger(__name__)
@@ -187,10 +187,20 @@ def build_ydl_opts(job: DownloadJob) -> Dict[str, Any]:
 
 # ---------------- public API ----------------
 def download(job: DownloadJob) -> None:
-    ensure_dir(job.output_dir)
+    # Default to ~/Downloads when output_dir is unset or equals CWD/out
+    out = job.output_dir
+    if not out or str(out).endswith("/out") or str(out).lower().endswith("\\out"):
+        try:
+            default_dl = user_downloads_dir()
+            out = default_dl
+        except Exception:
+            out = job.output_dir
+    ensure_dir(out)
     ffmpeg_location = _get(job.settings, "ffmpeg_location", None)
     _detect_ffmpeg(ffmpeg_location)
 
+    # Rebuild options with possibly updated output dir
+    job = DownloadJob(url=job.url, output_dir=out, settings=job.settings)
     ydl_opts = build_ydl_opts(job)
     log.info(f"Downloading -> {job.output_dir}")
 
