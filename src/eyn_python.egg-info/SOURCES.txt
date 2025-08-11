@@ -5,6 +5,7 @@ src/eyn_python/__main__.py
 src/eyn_python/clean.py
 src/eyn_python/cli.py
 src/eyn_python/config.py
+src/eyn_python/display.py
 src/eyn_python/logging.py
 src/eyn_python/paths.py
 src/eyn_python/plugins.py
@@ -27,8 +28,19 @@ src/eyn_python/media/ffprobe.py
 src/eyn_python/media/trim.py
 src/eyn_python/scrape/__init__.py
 src/eyn_python/scrape/core.py
+src/eyn_python/scrape/extract.py
+src/eyn_python/scrape/robots.py
+src/eyn_python/scrape/save.py
 src/eyn_python/scrape/sitemap.py
 src/eyn_python/system/__init__.py
 src/eyn_python/system/browsers.py
+src/eyn_python/system/disk.py
 src/eyn_python/system/net.py
+src/eyn_python/system/net_ext.py
+src/eyn_python/system/ports.py
+src/eyn_python/system/power.py
+src/eyn_python/system/procs.py
 src/eyn_python/system/specs.py
+src/eyn_python/system/tempfiles.py
+src/eyn_python/system/thermal.py
+src/eyn_python/system/uptime.py

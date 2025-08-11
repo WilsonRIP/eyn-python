@@ -11,6 +11,9 @@ from .core import (
     search_async,
 )
 from .sitemap import fetch_sitemap_urls
+from .extract import extract_metadata, extract_forms, extract_assets
+from .save import download_asset, save_page
+from .robots import fetch_robots_txt, can_fetch
 
 __all__ = [
     "HttpClient",
@@ -22,6 +25,13 @@ __all__ = [
     "crawl_async",
     "search_async",
     "fetch_sitemap_urls",
+    "extract_metadata",
+    "extract_forms",
+    "extract_assets",
+    "download_asset",
+    "save_page",
+    "fetch_robots_txt",
+    "can_fetch",
 ]
 
 

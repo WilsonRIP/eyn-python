@@ -2,18 +2,70 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional, cast
+import json as json_module
+from datetime import datetime
 
 import typer
 
 from eyn_python.logging import get_logger, console
+from dataclasses import asdict
+from typing import Any, Dict, cast
+from eyn_python.display import (
+    print_data,
+    build_specs_render,
+    build_netinfo_render,
+    build_uptime_render,
+    build_disks_render,
+    build_top_render,
+    build_battery_render,
+    build_temps_render,
+    build_ports_render,
+    build_pubip_render,
+    build_latency_render,
+)
+from rich.panel import Panel
 from eyn_python.config import GlobalSettings, DownloadSettings, ConvertSettings
 from eyn_python.download.youtube import DownloadJob, download
 from eyn_python.convert.core import plan_conversions, convert_all
 from eyn_python.media import ffprobe_json, extract_audio, trim_media, AudioExtractOptions
-from eyn_python.scrape import HttpClient, AsyncHttpClient, parse_html, extract_all, extract_links, crawl, crawl_async, fetch_sitemap_urls, search_async
+from eyn_python.paths import user_downloads_dir, ensure_dir
+from eyn_python.scrape import (
+    HttpClient,
+    AsyncHttpClient,
+    parse_html,
+    extract_all,
+    extract_links,
+    crawl,
+    crawl_async,
+    fetch_sitemap_urls,
+    search_async,
+    extract_metadata,
+    extract_forms,
+    extract_assets,
+    download_asset,
+    save_page,
+    fetch_robots_txt,
+    can_fetch,
+)
 from eyn_python.archive import ArchiveSettings, ArchiveFormat, create_archive, extract_archive
 from eyn_python.clean import CleanSettings, clean as clean_run
-from eyn_python.system import close_browsers, get_common_browser_app_names, detect_specs, network_info
+from eyn_python.system import (
+    close_browsers,
+    get_common_browser_app_names,
+    detect_specs,
+    network_info,
+    uptime_info,
+    partitions_info,
+    top_processes,
+    battery_info,
+    temperatures_info,
+    listening_ports,
+    public_ip,
+    http_latency,
+    TempCleanSettings,
+    default_temp_dir,
+    clean_temp,
+)
 
 app = typer.Typer(
     name="eyn",
@@ -101,6 +153,11 @@ def convert(
     audio_bitrate: Optional[str] = typer.Option("192k", "--audio-bitrate", help="Audio bitrate."),
     video_codec: str = typer.Option("libx264", "--vcodec", help="Video codec (libx264, libx265...)."),
     audio_codec: str = typer.Option("aac", "--acodec", help="Audio codec (aac, libmp3lame...)."),
+    # New core options
+    workers: Optional[int] = typer.Option(None, "--workers", "-j", help="Max concurrent ffmpeg processes (default: ~half your CPU cores)."),
+    smart_copy: bool = typer.Option(True, "--smart-copy/--no-smart-copy", help="Try stream copy when container/codec already compatible (faster, lossless)."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print planned ffmpeg commands without running."),
+    skip_up_to_date: bool = typer.Option(True, "--skip-up-to-date/--no-skip-up-to-date", help="Skip when destination exists, non-empty, and not older than source."),
 ) -> None:
     """
     Convert media using FFmpeg (installed separately). Works on files or directories.
@@ -119,7 +176,13 @@ def convert(
     settings.video.audio_codec = audio_codec
 
     jobs = plan_conversions(src, settings)
-    convert_all(jobs)
+    convert_all(
+        jobs,
+        workers=workers,
+        smart_copy=smart_copy,
+        dry_run=dry_run,
+        skip_if_up_to_date=skip_up_to_date,
+    )
 
 # ---- Media tools -------------------------------------------------------------
 
@@ -178,10 +241,13 @@ app.add_typer(scrape_app, name="scrape")
 @scrape_app.command("get")
 def scrape_get(
     url: str = typer.Argument(..., help="URL to fetch."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
 ) -> None:
     client = HttpClient()
     html = client.get(url)
-    console().print(f"Fetched {len(html)} bytes")
+    data = {"url": url, "bytes": len(html)}
+    from eyn_python.display import build_get_render, print_data
+    print_data(data, build_get_render(url, len(html)), json)
 
 
 @scrape_app.command("select")
@@ -189,6 +255,7 @@ def scrape_select(
     url: str = typer.Argument(..., help="URL to fetch."),
     selector: str = typer.Option(..., "--selector", "-s", help="CSS selector to extract."),
     attr: Optional[str] = typer.Option(None, "--attr", help="Attribute to extract (optional)."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
 ) -> None:
     client = HttpClient()
     html = client.get(url)
@@ -201,7 +268,9 @@ def scrape_select(
                 items.append(val)
         else:
             items.append(n.text(strip=True))
-    console().print_json(data={"count": len(items), "items": items})
+    data = {"count": len(items), "items": items}
+    from eyn_python.display import build_select_render, print_data
+    print_data(data, build_select_render(selector, len(items)), json)
 
 
 @scrape_app.command("crawl")
@@ -259,9 +328,97 @@ def scrape_links(
 @scrape_app.command("sitemap")
 def scrape_sitemap(
     base: str = typer.Argument(..., help="Base URL, e.g. https://example.com"),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
 ) -> None:
     urls = fetch_sitemap_urls(base)
-    console().print_json(data={"count": len(urls), "urls": urls})
+    data = {"count": len(urls), "urls": urls}
+    from eyn_python.display import build_list_render, print_data
+    print_data(data, build_list_render("Sitemap URLs", "URL", urls[:50]), json)
+
+
+@scrape_app.command("meta")
+def scrape_meta(
+    url: str = typer.Argument(..., help="URL to fetch and extract metadata."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    client = HttpClient()
+    html = client.get(url)
+    data = extract_metadata(html, url)
+    from eyn_python.display import build_meta_render, print_data
+    print_data(data, build_meta_render(data), json)
+
+
+@scrape_app.command("forms")
+def scrape_forms_cmd(
+    url: str = typer.Argument(..., help="URL to fetch and list forms."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    client = HttpClient()
+    html = client.get(url)
+    data = extract_forms(html, url)
+    from eyn_python.display import build_forms_render, print_data
+    print_data(data, build_forms_render(data), json)
+
+
+@scrape_app.command("assets")
+def scrape_assets_cmd(
+    url: str = typer.Argument(..., help="URL to fetch and list assets (img/js/css/media)."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    client = HttpClient()
+    html = client.get(url)
+    data = extract_assets(html, url)
+    from eyn_python.display import build_assets_summary_render, print_data
+    print_data(data, build_assets_summary_render(data), json)
+
+
+@scrape_app.command("download-asset")
+def scrape_download_asset(
+    url: str = typer.Argument(..., help="Asset URL to download."),
+    out: Path = typer.Option(Path.cwd() / "out", "--out", "-o", help="Output directory."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    dst = download_asset(url, out)
+    data = {"path": str(dst)}
+    from eyn_python.display import build_saved_panel, print_data
+    print_data(data, build_saved_panel("Downloaded", str(dst)), json)
+
+
+@scrape_app.command("save")
+def scrape_save_page(
+    url: str = typer.Argument(..., help="Page URL to fetch and save HTML."),
+    out: Path = typer.Option(Path.cwd() / "out", "--out", "-o", help="Output directory."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    result = save_page(url, out)
+    from eyn_python.display import build_saved_panel, print_data
+    print_data(result, build_saved_panel("Saved Page", result.get("path", "")), json)
+
+
+@scrape_app.command("robots")
+def scrape_robots(
+    base: str = typer.Argument(..., help="Base site URL, e.g. https://example.com"),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    info = fetch_robots_txt(base)
+    from eyn_python.display import build_robots_render, print_data
+    print_data(info, build_robots_render(info), json)
+
+
+@scrape_app.command("can-fetch")
+def scrape_can_fetch(
+    base: str = typer.Argument(..., help="Base site URL, e.g. https://example.com"),
+    url: str = typer.Argument(..., help="Target URL to check."),
+    agent: str = typer.Option("Mozilla/5.0", "--agent", help="User-Agent."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    r = fetch_robots_txt(base)
+    text = r.get("text")
+    text_str = text if isinstance(text, str) else None
+    ok = can_fetch(base, agent, url, text_str)
+    data = {"allowed": ok}
+    from eyn_python.display import print_data
+    print_data(data, Panel("Allowed" if ok else "Blocked", title="Robots"), json)
 
 
 @scrape_app.command("search")
@@ -374,15 +531,115 @@ def archive_extract(
 # ---- System info --------------------------------------------------------------
 
 @app.command("specs")
-def specs_cmd() -> None:
+def specs_cmd(
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+    save: bool = typer.Option(False, "--save", help="Save JSON to Downloads folder."),
+) -> None:
     """Show basic system specs (CPU, memory, disk)."""
-    console().print_json(data=detect_specs())
+    data = detect_specs()
+    data_dict = data if isinstance(data, dict) else asdict(data)
+    data_typed: Dict[str, Any] = cast(Dict[str, Any], data_dict)
+    print_data(data_typed, build_specs_render(data_typed), json)
+    if save:
+        downloads = user_downloads_dir()
+        ensure_dir(downloads)
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        dest = downloads / f"eyn_specs_{ts}.json"
+        dest.write_text(json_module.dumps(data_typed, indent=2), encoding="utf-8")
+        console().print(f"Saved -> {dest}")
 
 
 @app.command("netinfo")
-def netinfo_cmd() -> None:
+def netinfo_cmd(json: bool = typer.Option(False, "--json", help="Raw JSON output.")) -> None:
     """Show network interfaces and traffic counters."""
-    console().print_json(data=network_info())
+    data = network_info()
+    print_data(data, build_netinfo_render(data), json)
+
+
+@app.command("uptime")
+def uptime_cmd(json: bool = typer.Option(False, "--json", help="Raw JSON output.")) -> None:
+    """Show system uptime and load averages (if available)."""
+    data = uptime_info()
+    print_data(data, build_uptime_render(data), json)
+
+
+@app.command("disks")
+def disks_cmd(json: bool = typer.Option(False, "--json", help="Raw JSON output.")) -> None:
+    """List mounted disk partitions and usage."""
+    data = partitions_info()
+    print_data(data, build_disks_render(data), json)
+
+
+@app.command("top")
+def top_cmd(
+    limit: int = typer.Option(10, "--limit", "-n", help="Number of processes."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Show top processes by CPU and memory."""
+    data = top_processes(limit=limit)
+    print_data(data, build_top_render(data), json)
+
+
+@app.command("battery")
+def battery_cmd(json: bool = typer.Option(False, "--json", help="Raw JSON output.")) -> None:
+    """Show battery status (if present)."""
+    data = battery_info()
+    print_data(data, build_battery_render(data), json)
+
+
+@app.command("temps")
+def temps_cmd(json: bool = typer.Option(False, "--json", help="Raw JSON output.")) -> None:
+    """Show temperature sensors (if available)."""
+    data = temperatures_info()
+    print_data(data, build_temps_render(data), json)
+
+
+@app.command("ports")
+def ports_cmd(json: bool = typer.Option(False, "--json", help="Raw JSON output.")) -> None:
+    """List listening TCP/UDP ports."""
+    data = listening_ports()
+    print_data(data, build_ports_render(data), json)
+
+
+@app.command("pubip")
+def pubip_cmd(json: bool = typer.Option(False, "--json", help="Raw JSON output.")) -> None:
+    """Show your public IP (best-effort)."""
+    data = public_ip()
+    print_data(data, build_pubip_render(data), json)
+
+
+@app.command("latency")
+def latency_cmd(
+    url: str = typer.Option("https://www.google.com", "--url", help="URL to check."),
+    attempts: int = typer.Option(3, "--attempts", "-a", help="Number of attempts."),
+    timeout: float = typer.Option(5.0, "--timeout", "-t", help="Per-request timeout seconds."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """HTTP latency check to a URL (ms)."""
+    data = http_latency(url=url, attempts=attempts, timeout=timeout)
+    print_data(data, build_latency_render(data), json)
+
+
+# ---- Temp files cleaner -------------------------------------------------------
+
+@app.command("clean-temp")
+def clean_temp_cmd(
+    root: Optional[Path] = typer.Option(None, "--root", help="Temp directory to clean (defaults to system temp)."),
+    hours: float = typer.Option(24.0, "--hours", help="Delete files older than N hours."),
+    apply: bool = typer.Option(False, "--apply", help="Apply deletions (otherwise dry-run)."),
+    no_remove_empty: bool = typer.Option(False, "--no-remove-empty", help="Do not remove empty directories."),
+    include_hidden: bool = typer.Option(True, "--include-hidden/--no-include-hidden", help="Include hidden files."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    settings = TempCleanSettings(
+        older_than_hours=hours,
+        include_hidden=include_hidden,
+        apply=apply,
+        remove_empty_dirs=not no_remove_empty,
+    )
+    result = clean_temp(root, settings)
+    from eyn_python.display import build_clean_render, print_data
+    print_data(result, build_clean_render(result), json)
 
 if __name__ == "__main__":
     app()
