@@ -1,0 +1,2 @@
+[console_scripts]
+eyn = eyn_python.cli:app
