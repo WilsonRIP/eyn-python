@@ -26,6 +26,8 @@ from eyn_python.display import (
 from rich.panel import Panel
 from eyn_python.config import GlobalSettings, DownloadSettings, ConvertSettings
 from eyn_python.download.youtube import DownloadJob, download
+from eyn_python.download.instagram import download_instagram_video
+from eyn_python.download.tiktok import download_tiktok_video
 from eyn_python.convert.core import plan_conversions, convert_all
 from eyn_python.media import ffprobe_json, extract_audio, trim_media, AudioExtractOptions
 from eyn_python.paths import user_downloads_dir, ensure_dir
@@ -47,6 +49,8 @@ from eyn_python.scrape import (
     fetch_robots_txt,
     can_fetch,
 )
+from eyn_python.scrape.screenshot import take_screenshot
+from eyn_python.scrape.pdf import save_as_pdf
 from eyn_python.archive import ArchiveSettings, ArchiveFormat, create_archive, extract_archive
 from eyn_python.clean import CleanSettings, clean as clean_run
 from eyn_python.system import (
@@ -66,6 +70,14 @@ from eyn_python.system import (
     default_temp_dir,
     clean_temp,
 )
+from eyn_python.system.uuid import generate_uuid
+from eyn_python.system.password import generate_password
+from eyn_python.system.hash import hash_file
+from eyn_python.system.base64 import encode_base64, decode_base64
+from eyn_python.system.url import encode_url, decode_url
+from eyn_python.system.time import to_timestamp, from_timestamp
+from eyn_python.system.qrcode import generate_qr_code
+from eyn_python.system.text import word_count
 
 app = typer.Typer(
     name="eyn",
@@ -115,6 +127,30 @@ def dl_yt(
     )
     job = DownloadJob(url=url, output_dir=out, settings=settings)
     download(job)
+
+@dl_app.command("ig")
+def dl_ig(
+    url: str = typer.Argument(..., help="Instagram video URL."),
+    out: Path = typer.Option(Path.cwd() / "out.mp4", "--out", "-o", help="Output file."),
+) -> None:
+    """
+    Download a video from Instagram.
+    """
+    import asyncio
+    asyncio.run(download_instagram_video(url, out))
+    console().print(f"Video saved to {out}")
+
+@dl_app.command("tt")
+def dl_tt(
+    url: str = typer.Argument(..., help="TikTok video URL."),
+    out: Path = typer.Option(Path.cwd() / "out.mp4", "--out", "-o", help="Output file."),
+) -> None:
+    """
+    Download a video from TikTok.
+    """
+    import asyncio
+    asyncio.run(download_tiktok_video(url, out))
+    console().print(f"Video saved to {out}")
 
 # Convenience alias: `eyn dl URL`
 @dl_app.callback(invoke_without_command=True)
@@ -456,6 +492,29 @@ def scrape_search(
     console().print_json(data=[{"url": u, "matches": m} for u, m in hits_sorted])
 
 
+@scrape_app.command("screenshot")
+def scrape_screenshot(
+    url: str = typer.Argument(..., help="URL to screenshot."),
+    out: Path = typer.Option(Path.cwd() / "screenshot.png", "--out", "-o", help="Output file."),
+    no_full_page: bool = typer.Option(False, "--no-full-page", help="Screenshot the viewport only."),
+) -> None:
+    """Take a screenshot of a webpage."""
+    import asyncio
+    asyncio.run(take_screenshot(url, out, full_page=not no_full_page))
+    console().print(f"Screenshot saved to {out}")
+
+
+@scrape_app.command("pdf")
+def scrape_pdf(
+    url: str = typer.Argument(..., help="URL to save as PDF."),
+    out: Path = typer.Option(Path.cwd() / "page.pdf", "--out", "-o", help="Output file."),
+) -> None:
+    """Save a webpage as a PDF."""
+    import asyncio
+    asyncio.run(save_as_pdf(url, out))
+    console().print(f"PDF saved to {out}")
+
+
 # ---- Clean (unnecessary files) ----------------------------------------------
 
 @app.command("clean")
@@ -618,6 +677,127 @@ def latency_cmd(
     """HTTP latency check to a URL (ms)."""
     data = http_latency(url=url, attempts=attempts, timeout=timeout)
     print_data(data, build_latency_render(data), json)
+
+
+@app.command("uuid")
+def uuid_cmd() -> None:
+    """Generate a version 4 UUID."""
+    new_uuid = generate_uuid()
+    console().print(new_uuid)
+
+
+@app.command("password")
+def password_cmd(
+    length: int = typer.Option(16, "--length", "-l", help="Password length."),
+    no_symbols: bool = typer.Option(False, "--no-symbols", help="Exclude symbols."),
+) -> None:
+    """Generate a secure, random password."""
+    password = generate_password(length=length, use_symbols=not no_symbols)
+    console().print(password)
+
+
+@app.command("hash")
+def hash_cmd(
+    file: Path = typer.Argument(..., exists=True, readable=True, help="File to hash."),
+    algorithm: str = typer.Option("sha256", "--algorithm", "-a", help="Hash algorithm."),
+) -> None:
+    """Generate a hash for a file."""
+    digest = hash_file(file, algorithm)
+    console().print(f"{algorithm}: {digest}")
+
+
+base64_app = typer.Typer(help="Base64 encoder/decoder.")
+app.add_typer(base64_app, name="base64")
+
+
+@base64_app.command("encode")
+def base64_encode_cmd(text: str) -> None:
+    """Encode a string to Base64."""
+    encoded = encode_base64(text)
+    console().print(encoded)
+
+
+@base64_app.command("decode")
+def base64_decode_cmd(text: str) -> None:
+    """Decode a Base64 string."""
+    decoded = decode_base64(text)
+    console().print(decoded)
+
+
+url_app = typer.Typer(help="URL encoder/decoder.")
+app.add_typer(url_app, name="url")
+
+
+@url_app.command("encode")
+def url_encode_cmd(text: str) -> None:
+    """Encode a string to be URL-safe."""
+    encoded = encode_url(text)
+    console().print(encoded)
+
+
+@url_app.command("decode")
+def url_decode_cmd(text: str) -> None:
+    """Decode a URL-safe string."""
+    decoded = decode_url(text)
+    console().print(decoded)
+
+
+timestamp_app = typer.Typer(help="Timestamp converter.")
+app.add_typer(timestamp_app, name="timestamp")
+
+
+@timestamp_app.command("to")
+def timestamp_to_cmd(
+    date_str: str = typer.Argument(..., help="Date string (YYYY-MM-DD HH:MM:SS)"),
+) -> None:
+    """Convert a date string to a Unix timestamp."""
+    dt = datetime.fromisoformat(date_str)
+    ts = to_timestamp(dt)
+    console().print(ts)
+
+
+@timestamp_app.command("from")
+def timestamp_from_cmd(
+    ts: int = typer.Argument(..., help="Unix timestamp"),
+) -> None:
+    """Convert a Unix timestamp to a date string."""
+    dt = from_timestamp(ts)
+    console().print(dt.isoformat())
+
+
+@app.command("qr")
+def qr_cmd(
+    text: str = typer.Argument(..., help="Text or URL to encode."),
+    out: Path = typer.Option("qrcode.png", "--out", "-o", help="Output file."),
+) -> None:
+    """Generate a QR code."""
+    generate_qr_code(text, out)
+    console().print(f"QR code saved to {out}")
+
+
+@app.command("wc")
+def wc_cmd(
+    text: str = typer.Argument("", help="Text to count."),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", exists=True, readable=True, help="File to count."),
+) -> None:
+    """Count lines, words, and characters."""
+    if file:
+        text = file.read_text()
+    
+    counts = word_count(text)
+    console().print(f"Lines: {counts['lines']}")
+    console().print(f"Words: {counts['words']}")
+    console().print(f"Characters: {counts['chars']}")
+
+
+@app.command("headers")
+def headers_cmd(
+    url: str = typer.Argument(..., help="URL to fetch headers from."),
+) -> None:
+    """Fetch and display HTTP headers from a URL."""
+    client = HttpClient()
+    headers = client.get_headers(url)
+    console().print_json(data=headers)
 
 
 # ---- Temp files cleaner -------------------------------------------------------

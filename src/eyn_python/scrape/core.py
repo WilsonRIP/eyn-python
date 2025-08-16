@@ -45,6 +45,13 @@ class HttpClient:
         assert last_exc is not None
         raise last_exc
 
+    def get_headers(self, url: str) -> Dict[str, str]:
+        headers = {"User-Agent": self.user_agent}
+        with httpx.Client(timeout=self.timeout, headers=headers, follow_redirects=True) as c:
+            r = c.head(url)
+            r.raise_for_status()
+            return dict(r.headers)
+
 
 def parse_html(html: str) -> HTMLParser:
     return HTMLParser(html)
