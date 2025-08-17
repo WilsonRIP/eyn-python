@@ -98,6 +98,73 @@ from eyn_python.system import (
 )
 from eyn_python.system.uuid import generate_uuid
 from eyn_python.system.password import generate_password
+
+# New modules
+from eyn_python.database import (
+    create_database,
+    execute_query,
+    execute_script,
+    backup_database,
+    optimize_database,
+    get_table_info,
+    list_tables,
+    export_to_csv,
+    import_from_csv,
+)
+from eyn_python.crypto import (
+    encrypt_text,
+    decrypt_text,
+    encrypt_file,
+    decrypt_file,
+    generate_key,
+    hash_password,
+    verify_password,
+    create_secure_token,
+    verify_secure_token,
+)
+from eyn_python.network import (
+    scan_ports,
+    dns_lookup,
+    reverse_dns_lookup,
+    ping_host,
+    traceroute,
+    check_ssl_certificate,
+    get_whois_info,
+    check_port_status,
+    get_network_interfaces,
+    monitor_bandwidth,
+)
+from eyn_python.analysis import (
+    detect_file_type,
+    find_duplicates,
+    analyze_file_size,
+    get_file_statistics,
+    find_large_files,
+    analyze_directory_structure,
+    check_file_integrity,
+    find_empty_files,
+    get_file_metadata,
+    analyze_text_file,
+)
+from eyn_python.text import (
+    extract_emails,
+    extract_urls,
+    extract_phone_numbers,
+    extract_credit_cards,
+    extract_ips,
+    clean_text,
+    normalize_text,
+    remove_stopwords,
+    extract_keywords,
+    summarize_text,
+    detect_language,
+    translate_text,
+    extract_named_entities,
+    sentiment_analysis,
+    text_similarity,
+    format_text,
+    validate_text,
+)
 from eyn_python.system.hash import hash_file
 from eyn_python.system.base64 import encode_base64, decode_base64
 from eyn_python.system.url import encode_url, decode_url
@@ -1954,6 +2021,602 @@ def clean_temp_cmd(
     result = clean_temp(root, settings)
     from eyn_python.display import build_clean_render, print_data
     print_data(result, build_clean_render(result), json)
+
+
+# ---- Database Tools -----------------------------------------------------------
+
+db_app = typer.Typer(help="SQLite database operations.")
+app.add_typer(db_app, name="db")
+
+
+@db_app.command("query")
+def db_query_cmd(
+    db_path: Path = typer.Argument(..., help="Database file path."),
+    query: str = typer.Argument(..., help="SQL query to execute."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Execute a SQL query on a database."""
+    try:
+        results = execute_query(db_path, query)
+        if json:
+            console().print_json(data=results)
+        else:
+            console().print(f"Query returned {len(results)} rows")
+            for i, row in enumerate(results[:10]):  # Show first 10 rows
+                console().print(f"Row {i+1}: {row}")
+            if len(results) > 10:
+                console().print(f"... and {len(results) - 10} more rows")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@db_app.command("tables")
+def db_tables_cmd(
+    db_path: Path = typer.Argument(..., help="Database file path."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """List all tables in a database."""
+    try:
+        tables = list_tables(db_path)
+        if json:
+            console().print_json(data=tables)
+        else:
+            console().print(f"Found {len(tables)} tables:")
+            for table in tables:
+                console().print(f"  - {table}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@db_app.command("info")
+def db_info_cmd(
+    db_path: Path = typer.Argument(..., help="Database file path."),
+    table: str = typer.Argument(..., help="Table name."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Get table schema information."""
+    try:
+        info = get_table_info(db_path, table)
+        if json:
+            console().print_json(data=info)
+        else:
+            console().print(f"Table: {table}")
+            for column in info:
+                console().print(f"  {column['name']}: {column['type']}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@db_app.command("backup")
+def db_backup_cmd(
+    db_path: Path = typer.Argument(..., help="Database file path."),
+    backup_path: Path = typer.Argument(..., help="Backup file path."),
+) -> None:
+    """Create a backup of a database."""
+    try:
+        backup_database(db_path, backup_path)
+        console().print(f"Database backed up to {backup_path}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@db_app.command("optimize")
+def db_optimize_cmd(
+    db_path: Path = typer.Argument(..., help="Database file path."),
+) -> None:
+    """Optimize a database."""
+    try:
+        optimize_database(db_path)
+        console().print("Database optimized successfully")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@db_app.command("export")
+def db_export_cmd(
+    db_path: Path = typer.Argument(..., help="Database file path."),
+    table: str = typer.Argument(..., help="Table name."),
+    csv_path: Path = typer.Argument(..., help="CSV output file."),
+) -> None:
+    """Export a table to CSV."""
+    try:
+        export_to_csv(db_path, table, csv_path)
+        console().print(f"Table exported to {csv_path}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@db_app.command("import")
+def db_import_cmd(
+    db_path: Path = typer.Argument(..., help="Database file path."),
+    csv_path: Path = typer.Argument(..., help="CSV file to import."),
+    table: str = typer.Argument(..., help="Table name."),
+    create_table: bool = typer.Option(True, "--create-table/--no-create-table", help="Create table if it doesn't exist."),
+) -> None:
+    """Import CSV data into a table."""
+    try:
+        import_from_csv(db_path, csv_path, table, create_table)
+        console().print(f"CSV data imported into table {table}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+# ---- Crypto Tools -------------------------------------------------------------
+
+crypto_app = typer.Typer(help="Encryption and cryptography tools.")
+app.add_typer(crypto_app, name="crypto")
+
+
+@crypto_app.command("encrypt-text")
+def crypto_encrypt_text_cmd(
+    text: str = typer.Argument(..., help="Text to encrypt."),
+    key: str = typer.Option(..., "--key", "-k", help="Encryption key."),
+) -> None:
+    """Encrypt text."""
+    try:
+        encrypted = encrypt_text(text, key)
+        console().print(encrypted)
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@crypto_app.command("decrypt-text")
+def crypto_decrypt_text_cmd(
+    encrypted_text: str = typer.Argument(..., help="Encrypted text."),
+    key: str = typer.Option(..., "--key", "-k", help="Decryption key."),
+) -> None:
+    """Decrypt text."""
+    try:
+        decrypted = decrypt_text(encrypted_text, key)
+        console().print(decrypted)
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@crypto_app.command("encrypt-file")
+def crypto_encrypt_file_cmd(
+    input_file: Path = typer.Argument(..., help="File to encrypt."),
+    output_file: Path = typer.Argument(..., help="Output encrypted file."),
+    key: str = typer.Option(..., "--key", "-k", help="Encryption key."),
+) -> None:
+    """Encrypt a file."""
+    try:
+        encrypt_file(input_file, output_file, key)
+        console().print(f"File encrypted: {output_file}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@crypto_app.command("decrypt-file")
+def crypto_decrypt_file_cmd(
+    input_file: Path = typer.Argument(..., help="File to decrypt."),
+    output_file: Path = typer.Argument(..., help="Output decrypted file."),
+    key: str = typer.Option(..., "--key", "-k", help="Decryption key."),
+) -> None:
+    """Decrypt a file."""
+    try:
+        decrypt_file(input_file, output_file, key)
+        console().print(f"File decrypted: {output_file}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@crypto_app.command("generate-key")
+def crypto_generate_key_cmd() -> None:
+    """Generate a new encryption key."""
+    try:
+        key = generate_key()
+        console().print(key.decode())
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@crypto_app.command("hash-password")
+def crypto_hash_password_cmd(
+    password: str = typer.Argument(..., help="Password to hash."),
+) -> None:
+    """Hash a password."""
+    try:
+        hash_hex, salt = hash_password(password)
+        console().print(f"Hash: {hash_hex}")
+        console().print(f"Salt: {salt.hex()}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+# ---- Network Tools ------------------------------------------------------------
+
+net_app = typer.Typer(help="Network utilities and tools.")
+app.add_typer(net_app, name="net")
+
+
+@net_app.command("scan")
+def net_scan_cmd(
+    host: str = typer.Argument(..., help="Host to scan."),
+    start_port: int = typer.Option(1, "--start", help="Start port."),
+    end_port: int = typer.Option(1024, "--end", help="End port."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Scan ports on a host."""
+    try:
+        open_ports = scan_ports(host, start_port, end_port)
+        if json:
+            console().print_json(data=open_ports)
+        else:
+            console().print(f"Scanning {host} (ports {start_port}-{end_port})")
+            if open_ports:
+                console().print("Open ports:")
+                for port, service in open_ports.items():
+                    console().print(f"  {port}/tcp - {service}")
+            else:
+                console().print("No open ports found")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@net_app.command("dns")
+def net_dns_cmd(
+    domain: str = typer.Argument(..., help="Domain to lookup."),
+    record_type: str = typer.Option("A", "--type", help="DNS record type."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Perform DNS lookup."""
+    try:
+        results = dns_lookup(domain, record_type)
+        if json:
+            console().print_json(data=results)
+        else:
+            console().print(f"DNS {record_type} records for {domain}:")
+            for result in results:
+                console().print(f"  {result}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@net_app.command("reverse-dns")
+def net_reverse_dns_cmd(
+    ip: str = typer.Argument(..., help="IP address for reverse lookup."),
+) -> None:
+    """Perform reverse DNS lookup."""
+    try:
+        hostname = reverse_dns_lookup(ip)
+        if hostname:
+            console().print(f"{ip} -> {hostname}")
+        else:
+            console().print(f"No reverse DNS record found for {ip}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@net_app.command("ping")
+def net_ping_cmd(
+    host: str = typer.Argument(..., help="Host to ping."),
+    count: int = typer.Option(4, "--count", "-c", help="Number of pings."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Ping a host."""
+    try:
+        result = ping_host(host, count)
+        if json:
+            console().print_json(data=result)
+        else:
+            if result['reachable']:
+                console().print(f"Host {host} is reachable")
+                console().print(f"Packets: {result['packets_received']}/{result['packets_sent']}")
+                console().print(f"Loss: {result['packet_loss']:.1f}%")
+                console().print(f"Avg time: {result['avg_time']:.1f}ms")
+            else:
+                console().print(f"Host {host} is not reachable")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@net_app.command("ssl")
+def net_ssl_cmd(
+    host: str = typer.Argument(..., help="Host to check."),
+    port: int = typer.Option(443, "--port", "-p", help="Port to check."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Check SSL certificate."""
+    try:
+        cert_info = check_ssl_certificate(host, port)
+        if json:
+            console().print_json(data=cert_info)
+        else:
+            if cert_info['valid']:
+                console().print(f"SSL certificate for {host}:{port} is valid")
+                console().print(f"Subject: {cert_info['subject']}")
+                console().print(f"Issuer: {cert_info['issuer']}")
+                console().print(f"Valid until: {cert_info['not_after']}")
+            else:
+                console().print(f"SSL certificate check failed: {cert_info['error']}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@net_app.command("whois")
+def net_whois_cmd(
+    domain: str = typer.Argument(..., help="Domain to lookup."),
+) -> None:
+    """Get WHOIS information."""
+    try:
+        info = get_whois_info(domain)
+        if info['success']:
+            console().print(info['data'])
+        else:
+            console().print(f"WHOIS lookup failed: {info['error']}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+# ---- Analysis Tools -----------------------------------------------------------
+
+analysis_app = typer.Typer(help="File and data analysis tools.")
+app.add_typer(analysis_app, name="analysis")
+
+
+@analysis_app.command("file-type")
+def analysis_file_type_cmd(
+    file_path: Path = typer.Argument(..., help="File to analyze."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Detect file type."""
+    try:
+        file_info = detect_file_type(file_path)
+        if json:
+            console().print_json(data=file_info)
+        else:
+            console().print(f"File: {file_path}")
+            console().print(f"Size: {file_info['size']} bytes")
+            console().print(f"Extension: {file_info['extension']}")
+            console().print(f"MIME type: {file_info['mime_type']}")
+            console().print(f"Magic type: {file_info['magic_type']}")
+            console().print(f"Is text: {file_info['is_text']}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@analysis_app.command("duplicates")
+def analysis_duplicates_cmd(
+    directory: Path = typer.Argument(..., help="Directory to scan."),
+    min_size: int = typer.Option(1024, "--min-size", help="Minimum file size in bytes."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Find duplicate files."""
+    try:
+        duplicates = find_duplicates(directory, min_size)
+        if json:
+            console().print_json(data=duplicates)
+        else:
+            console().print(f"Found {len(duplicates)} groups of duplicate files:")
+            for hash_val, files in duplicates.items():
+                console().print(f"\nHash: {hash_val[:8]}...")
+                for file_path in files:
+                    console().print(f"  {file_path}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@analysis_app.command("stats")
+def analysis_stats_cmd(
+    directory: Path = typer.Argument(..., help="Directory to analyze."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Get file statistics."""
+    try:
+        stats = get_file_statistics(directory)
+        if json:
+            console().print_json(data=stats)
+        else:
+            console().print(f"Directory: {directory}")
+            console().print(f"Total files: {stats['total_files']}")
+            console().print(f"Total directories: {stats['total_directories']}")
+            console().print(f"Total size: {stats['total_size'] / (1024**3):.2f} GB")
+            console().print(f"File types: {len(stats['file_types'])}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@analysis_app.command("large-files")
+def analysis_large_files_cmd(
+    directory: Path = typer.Argument(..., help="Directory to scan."),
+    min_size_mb: float = typer.Option(100, "--min-size", help="Minimum file size in MB."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Find large files."""
+    try:
+        large_files = find_large_files(directory, min_size_mb)
+        if json:
+            console().print_json(data=large_files)
+        else:
+            console().print(f"Found {len(large_files)} files larger than {min_size_mb}MB:")
+            for file_info in large_files:
+                console().print(f"  {file_info['size_mb']:.1f}MB - {file_info['path']}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@analysis_app.command("integrity")
+def analysis_integrity_cmd(
+    file_path: Path = typer.Argument(..., help="File to check."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Check file integrity."""
+    try:
+        integrity = check_file_integrity(file_path)
+        if json:
+            console().print_json(data=integrity)
+        else:
+            console().print(f"File: {file_path}")
+            console().print(f"Size: {integrity['size']} bytes")
+            console().print(f"MD5: {integrity['hashes']['md5']}")
+            console().print(f"SHA1: {integrity['hashes']['sha1']}")
+            console().print(f"SHA256: {integrity['hashes']['sha256']}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+# ---- Text Processing Tools ----------------------------------------------------
+
+text_app = typer.Typer(help="Text processing and analysis tools.")
+app.add_typer(text_app, name="text")
+
+
+@text_app.command("extract-emails")
+def text_extract_emails_cmd(
+    text: str = typer.Argument(..., help="Text to extract emails from."),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to read text from."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract email addresses from text."""
+    try:
+        if file:
+            text = file.read_text()
+        
+        emails = extract_emails(text)
+        if json:
+            console().print_json(data=emails)
+        else:
+            console().print(f"Found {len(emails)} email addresses:")
+            for email in emails:
+                console().print(f"  {email}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@text_app.command("extract-urls")
+def text_extract_urls_cmd(
+    text: str = typer.Argument(..., help="Text to extract URLs from."),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to read text from."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract URLs from text."""
+    try:
+        if file:
+            text = file.read_text()
+        
+        urls = extract_urls(text)
+        if json:
+            console().print_json(data=urls)
+        else:
+            console().print(f"Found {len(urls)} URLs:")
+            for url in urls:
+                console().print(f"  {url}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@text_app.command("sentiment")
+def text_sentiment_cmd(
+    text: str = typer.Argument(..., help="Text to analyze."),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to read text from."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Analyze text sentiment."""
+    try:
+        if file:
+            text = file.read_text()
+        
+        sentiment = sentiment_analysis(text)
+        if json:
+            console().print_json(data=sentiment)
+        else:
+            console().print(f"Sentiment analysis:")
+            console().print(f"  Positive: {sentiment['positive']:.2%}")
+            console().print(f"  Negative: {sentiment['negative']:.2%}")
+            console().print(f"  Neutral: {sentiment['neutral']:.2%}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@text_app.command("keywords")
+def text_keywords_cmd(
+    text: str = typer.Argument(..., help="Text to extract keywords from."),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to read text from."),
+    top_n: int = typer.Option(10, "--top", help="Number of keywords to extract."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract keywords from text."""
+    try:
+        if file:
+            text = file.read_text()
+        
+        keywords = extract_keywords(text, top_n)
+        if json:
+            console().print_json(data=keywords)
+        else:
+            console().print(f"Top {len(keywords)} keywords:")
+            for word, count in keywords:
+                console().print(f"  {word}: {count}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@text_app.command("summarize")
+def text_summarize_cmd(
+    text: str = typer.Argument(..., help="Text to summarize."),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to read text from."),
+    sentences: int = typer.Option(3, "--sentences", help="Number of sentences in summary."),
+) -> None:
+    """Summarize text."""
+    try:
+        if file:
+            text = file.read_text()
+        
+        summary = summarize_text(text, sentences)
+        console().print("Summary:")
+        console().print(summary)
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@text_app.command("clean")
+def text_clean_cmd(
+    text: str = typer.Argument(..., help="Text to clean."),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to read text from."),
+    remove_punctuation: bool = typer.Option(False, "--no-punctuation", help="Remove punctuation."),
+    remove_numbers: bool = typer.Option(False, "--no-numbers", help="Remove numbers."),
+) -> None:
+    """Clean and normalize text."""
+    try:
+        if file:
+            text = file.read_text()
+        
+        cleaned = clean_text(text, remove_punctuation, remove_numbers)
+        console().print(cleaned)
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
 
 if __name__ == "__main__":
     app()

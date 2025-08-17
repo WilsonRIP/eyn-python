@@ -23,6 +23,10 @@ dependencies = [
   "pytesseract>=0.3.10",
   "PyMuPDF>=1.23.0",
   "Flask>=3.0.0",
+  "cryptography>=41.0.0",
+  "dnspython>=2.4.0",
+  "python-magic>=0.4.27",
+  "playwright>=1.40.0",
 ]
 
 [project.optional-dependencies]
