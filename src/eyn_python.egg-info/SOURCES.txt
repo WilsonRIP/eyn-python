@@ -41,8 +41,12 @@ src/eyn_python/media/image.py
 src/eyn_python/media/ocr.py
 src/eyn_python/media/pdf_tools.py
 src/eyn_python/media/trim.py
+src/eyn_python/metadata/__init__.py
+src/eyn_python/metadata/core.py
 src/eyn_python/network/__init__.py
 src/eyn_python/network/core.py
+src/eyn_python/notes/__init__.py
+src/eyn_python/notes/core.py
 src/eyn_python/random/__init__.py
 src/eyn_python/random/dice.py
 src/eyn_python/random/lorem.py

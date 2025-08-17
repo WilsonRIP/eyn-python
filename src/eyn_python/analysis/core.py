@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
-import magic
 import os
+
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Union
 from collections import defaultdict
@@ -13,6 +13,13 @@ from datetime import datetime
 from eyn_python.logging import get_logger
 
 log = get_logger(__name__)
+
+# Try to import magic, fallback gracefully if not available
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+except ImportError:
+    MAGIC_AVAILABLE = False
 
 
 def detect_file_type(file_path: Union[str, Path]) -> Dict[str, Any]:
@@ -41,12 +48,15 @@ def detect_file_type(file_path: Union[str, Path]) -> Dict[str, Any]:
         log.debug(f"MIME type detection failed: {e}")
     
     # Magic number detection
-    try:
-        with open(file_path, 'rb') as f:
-            magic_type = magic.from_buffer(f.read(2048), mime=True)
-            result['magic_type'] = magic_type
-    except Exception as e:
-        log.debug(f"Magic detection failed: {e}")
+    if MAGIC_AVAILABLE:
+        try:
+            with open(file_path, 'rb') as f:
+                magic_type = magic.from_buffer(f.read(2048), mime=True)  # type: ignore
+                result['magic_type'] = magic_type
+        except Exception as e:
+            log.debug(f"Magic detection failed: {e}")
+    else:
+        log.debug("Magic detection not available")
     
     # Text file detection
     try:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, cast
+from typing import Optional, cast, List
 import json as json_module
 import json
 from datetime import datetime
@@ -165,6 +165,16 @@ from eyn_python.text import (
     format_text,
     validate_text,
 )
+from eyn_python.metadata import (
+    extract_file_metadata,
+    extract_web_metadata,
+    extract_image_metadata,
+    extract_video_metadata,
+    extract_audio_metadata,
+    extract_document_metadata,
+    extract_archive_metadata,
+    extract_comprehensive_metadata,
+)
 from eyn_python.system.hash import hash_file
 from eyn_python.system.base64 import encode_base64, decode_base64
 from eyn_python.system.url import encode_url, decode_url
@@ -234,6 +244,14 @@ from eyn_python.random import (
     calculate_dice_stats,
     compare_dice_sets,
     parse_dice_notation,
+)
+from eyn_python.notes import (
+    create_note,
+    get_note,
+    list_notes,
+    search_notes,
+    update_note,
+    delete_note,
 )
 
 app = typer.Typer(
@@ -2613,6 +2631,446 @@ def text_clean_cmd(
         
         cleaned = clean_text(text, remove_punctuation, remove_numbers)
         console().print(cleaned)
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+# ---- Metadata Tools ----------------------------------------------------
+
+metadata_app = typer.Typer(help="Comprehensive metadata extraction tools.")
+app.add_typer(metadata_app, name="metadata")
+
+
+@metadata_app.command("file")
+def metadata_file_cmd(
+    file_path: Path = typer.Argument(..., help="File to extract metadata from."),
+    comprehensive: bool = typer.Option(True, "--comprehensive/--basic", help="Extract comprehensive metadata including specialized types."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract comprehensive metadata from a file."""
+    try:
+        if comprehensive:
+            result = extract_comprehensive_metadata(file_path)
+            if json:
+                import json as json_module
+                from eyn_python.metadata.core import _serialize_datetime
+                json_str = json_module.dumps(result.raw_data, default=_serialize_datetime, indent=2)
+                console().print(json_str)
+            else:
+                console().print(f"[bold blue]File Metadata:[/bold blue]")
+                console().print(f"  Path: {result.file_metadata.path}")
+                console().print(f"  Name: {result.file_metadata.name}")
+                console().print(f"  Size: {result.file_metadata.size:,} bytes")
+                console().print(f"  Extension: {result.file_metadata.extension}")
+                console().print(f"  MIME Type: {result.file_metadata.mime_type}")
+                console().print(f"  Magic Type: {result.file_metadata.magic_type}")
+                console().print(f"  Created: {result.file_metadata.created}")
+                console().print(f"  Modified: {result.file_metadata.modified}")
+                console().print(f"  Is Text: {result.file_metadata.is_text}")
+                console().print(f"  MD5: {result.file_metadata.hash_md5}")
+                console().print(f"  SHA256: {result.file_metadata.hash_sha256}")
+
+                if result.image_metadata:
+                    console().print(f"\n[bold green]Image Metadata:[/bold green]")
+                    console().print(f"  Dimensions: {result.image_metadata.dimensions}")
+                    console().print(f"  Mode: {result.image_metadata.mode}")
+                    console().print(f"  Format: {result.image_metadata.format}")
+                    console().print(f"  DPI: {result.image_metadata.dpi}")
+                    console().print(f"  Animation: {result.image_metadata.animation}")
+
+                if result.video_metadata:
+                    console().print(f"\n[bold green]Video Metadata:[/bold green]")
+                    console().print(f"  Duration: {result.video_metadata.duration:.2f}s")
+                    console().print(f"  Dimensions: {result.video_metadata.dimensions}")
+                    console().print(f"  FPS: {result.video_metadata.fps}")
+                    console().print(f"  Codec: {result.video_metadata.codec}")
+                    console().print(f"  Bitrate: {result.video_metadata.bitrate}")
+
+                if result.audio_metadata:
+                    console().print(f"\n[bold green]Audio Metadata:[/bold green]")
+                    console().print(f"  Duration: {result.audio_metadata.duration:.2f}s")
+                    console().print(f"  Codec: {result.audio_metadata.codec}")
+                    console().print(f"  Channels: {result.audio_metadata.channels}")
+                    console().print(f"  Sample Rate: {result.audio_metadata.sample_rate}")
+                    console().print(f"  Title: {result.audio_metadata.title}")
+                    console().print(f"  Artist: {result.audio_metadata.artist}")
+                    console().print(f"  Album: {result.audio_metadata.album}")
+
+                if result.document_metadata:
+                    console().print(f"\n[bold green]Document Metadata:[/bold green]")
+                    console().print(f"  Pages: {result.document_metadata.pages}")
+                    console().print(f"  Title: {result.document_metadata.title}")
+                    console().print(f"  Author: {result.document_metadata.author}")
+                    console().print(f"  Subject: {result.document_metadata.subject}")
+                    console().print(f"  Creator: {result.document_metadata.creator}")
+
+                if result.archive_metadata:
+                    console().print(f"\n[bold green]Archive Metadata:[/bold green]")
+                    console().print(f"  Format: {result.archive_metadata.format}")
+                    console().print(f"  Compression: {result.archive_metadata.compression}")
+                    console().print(f"  File Count: {result.archive_metadata.file_count}")
+                    console().print(f"  Total Size: {result.archive_metadata.total_size:,} bytes")
+        else:
+            result = extract_file_metadata(file_path)
+            if json:
+                import json as json_module
+                from eyn_python.metadata.core import _serialize_datetime
+                json_str = json_module.dumps(asdict(result), default=_serialize_datetime, indent=2)
+                console().print(json_str)
+            else:
+                # Handle basic file metadata
+                console().print(f"[bold blue]File Metadata:[/bold blue]")
+                console().print(f"  Path: {result.path}")
+                console().print(f"  Name: {result.name}")
+                console().print(f"  Size: {result.size:,} bytes")
+                console().print(f"  Extension: {result.extension}")
+                console().print(f"  MIME Type: {result.mime_type}")
+                console().print(f"  Magic Type: {result.magic_type}")
+                console().print(f"  Created: {result.created}")
+                console().print(f"  Modified: {result.modified}")
+                console().print(f"  Is Text: {result.is_text}")
+                console().print(f"  MD5: {result.hash_md5}")
+                console().print(f"  SHA256: {result.hash_sha256}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@metadata_app.command("web")
+def metadata_web_cmd(
+    url: str = typer.Argument(..., help="URL to extract metadata from."),
+    timeout: float = typer.Option(30.0, "--timeout", help="Request timeout in seconds."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract metadata from a web page."""
+    try:
+        result = extract_web_metadata(url, timeout)
+        
+        if json:
+            console().print_json(data=asdict(result))
+        else:
+            console().print(f"[bold blue]Web Metadata:[/bold blue]")
+            console().print(f"  URL: {result.url}")
+            console().print(f"  Status Code: {result.status_code}")
+            console().print(f"  Title: {result.title}")
+            console().print(f"  Description: {result.description}")
+            console().print(f"  Language: {result.language}")
+            console().print(f"  Word Count: {result.word_count}")
+            console().print(f"  Content Type: {result.content_type}")
+            console().print(f"  Content Length: {result.content_length:,} bytes")
+            console().print(f"  Last Modified: {result.last_modified}")
+            
+            if result.opengraph:
+                console().print(f"\n[bold green]Open Graph:[/bold green]")
+                for key, value in result.opengraph.items():
+                    console().print(f"  {key}: {value}")
+            
+            if result.twitter:
+                console().print(f"\n[bold green]Twitter Cards:[/bold green]")
+                for key, value in result.twitter.items():
+                    console().print(f"  {key}: {value}")
+            
+            if result.headings:
+                console().print(f"\n[bold green]Headings:[/bold green]")
+                for heading, count in result.headings.items():
+                    console().print(f"  {heading}: {count}")
+            
+            if result.images:
+                console().print(f"\n[bold green]Images:[/bold green]")
+                console().print(f"  Count: {result.images.get('count', 0)}")
+                console().print(f"  Missing Alt: {result.images.get('missing_alt', 0)}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@metadata_app.command("image")
+def metadata_image_cmd(
+    file_path: Path = typer.Argument(..., help="Image file to extract metadata from."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract image-specific metadata."""
+    try:
+        result = extract_image_metadata(file_path)
+        
+        if json:
+            console().print_json(data=asdict(result))
+        else:
+            console().print(f"[bold blue]Image Metadata:[/bold blue]")
+            console().print(f"  Dimensions: {result.dimensions}")
+            console().print(f"  Mode: {result.mode}")
+            console().print(f"  Format: {result.format}")
+            console().print(f"  DPI: {result.dpi}")
+            console().print(f"  ICC Profile: {result.icc_profile}")
+            console().print(f"  Transparency: {result.transparency}")
+            console().print(f"  Animation: {result.animation}")
+            
+            if result.exif:
+                console().print(f"\n[bold green]EXIF Data:[/bold green]")
+                for key, value in result.exif.items():
+                    console().print(f"  {key}: {value}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@metadata_app.command("video")
+def metadata_video_cmd(
+    file_path: Path = typer.Argument(..., help="Video file to extract metadata from."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract video-specific metadata."""
+    try:
+        result = extract_video_metadata(file_path)
+        
+        if json:
+            console().print_json(data=asdict(result))
+        else:
+            console().print(f"[bold blue]Video Metadata:[/bold blue]")
+            console().print(f"  Duration: {result.duration:.2f}s")
+            console().print(f"  Dimensions: {result.dimensions}")
+            console().print(f"  FPS: {result.fps}")
+            console().print(f"  Codec: {result.codec}")
+            console().print(f"  Bitrate: {result.bitrate:,} bps")
+            console().print(f"  Audio Codec: {result.audio_codec}")
+            console().print(f"  Audio Channels: {result.audio_channels}")
+            console().print(f"  Audio Sample Rate: {result.audio_sample_rate}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@metadata_app.command("audio")
+def metadata_audio_cmd(
+    file_path: Path = typer.Argument(..., help="Audio file to extract metadata from."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract audio-specific metadata."""
+    try:
+        result = extract_audio_metadata(file_path)
+        
+        if json:
+            console().print_json(data=asdict(result))
+        else:
+            console().print(f"[bold blue]Audio Metadata:[/bold blue]")
+            console().print(f"  Duration: {result.duration:.2f}s")
+            console().print(f"  Codec: {result.codec}")
+            console().print(f"  Channels: {result.channels}")
+            console().print(f"  Sample Rate: {result.sample_rate}")
+            console().print(f"  Bitrate: {result.bitrate:,} bps")
+            console().print(f"  Title: {result.title}")
+            console().print(f"  Artist: {result.artist}")
+            console().print(f"  Album: {result.album}")
+            console().print(f"  Year: {result.year}")
+            console().print(f"  Genre: {result.genre}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@metadata_app.command("document")
+def metadata_document_cmd(
+    file_path: Path = typer.Argument(..., help="Document file to extract metadata from."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract document-specific metadata."""
+    try:
+        result = extract_document_metadata(file_path)
+        
+        if json:
+            console().print_json(data=asdict(result))
+        else:
+            console().print(f"[bold blue]Document Metadata:[/bold blue]")
+            console().print(f"  Pages: {result.pages}")
+            console().print(f"  Title: {result.title}")
+            console().print(f"  Author: {result.author}")
+            console().print(f"  Subject: {result.subject}")
+            console().print(f"  Creator: {result.creator}")
+            console().print(f"  Producer: {result.producer}")
+            console().print(f"  Creation Date: {result.creation_date}")
+            console().print(f"  Modification Date: {result.modification_date}")
+            if result.keywords:
+                console().print(f"  Keywords: {', '.join(result.keywords)}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@metadata_app.command("archive")
+def metadata_archive_cmd(
+    file_path: Path = typer.Argument(..., help="Archive file to extract metadata from."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Extract archive-specific metadata."""
+    try:
+        result = extract_archive_metadata(file_path)
+        
+        if json:
+            console().print_json(data=asdict(result))
+        else:
+            console().print(f"[bold blue]Archive Metadata:[/bold blue]")
+            console().print(f"  Format: {result.format}")
+            console().print(f"  Compression: {result.compression}")
+            console().print(f"  File Count: {result.file_count}")
+            console().print(f"  Total Size: {result.total_size:,} bytes")
+            console().print(f"  Comment: {result.comment}")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+# ---- Notes Manager Tools ----------------------------------------------------
+
+notes_app = typer.Typer(help="Quick notes manager with tags and local search (markdown).")
+app.add_typer(notes_app, name="note")
+
+
+@notes_app.command("create")
+def notes_create_cmd(
+    title: str = typer.Argument(..., help="Title of the note."),
+    content: str = typer.Argument(..., help="Content of the note (Markdown supported)."),
+    tags: Optional[str] = typer.Option(None, "--tag", "-t", help="Tags for the note (comma-separated)."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Create a new note."""
+    try:
+        parsed_tags = [t.strip() for t in tags.split(',')] if tags else None
+        note = create_note(title, content, parsed_tags)
+        if json:
+            console().print_json(data=asdict(note))
+        else:
+            console().print(f"[green]✓ Note created successfully:[/green] {note.title} (ID: {note.id})")
+            console().print(f"  Tags: {', '.join(note.tags) if note.tags else 'None'}")
+            console().print(f"  Created: {note.created_at}")
+            console().print(f"  Updated: {note.updated_at}")
+            console().print("\n[bold]Content:[/bold]")
+            console().print(note.content)
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@notes_app.command("get")
+def notes_get_cmd(
+    note_id: str = typer.Argument(..., help="ID of the note to retrieve."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Retrieve a note by ID."""
+    try:
+        note = get_note(note_id)
+        if note:
+            if json:
+                console().print_json(data=asdict(note))
+            else:
+                console().print(f"[bold green]Note: {note.title}[/bold green] (ID: {note.id})")
+                console().print(f"  Tags: {', '.join(note.tags) if note.tags else 'None'}")
+                console().print(f"  Created: {note.created_at}")
+                console().print(f"  Updated: {note.updated_at}")
+                console().print("\n[bold]Content:[/bold]")
+                console().print(note.content)
+        else:
+            console().print(f"[yellow]Note with ID '{note_id}' not found.[/yellow]")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@notes_app.command("list")
+def notes_list_cmd(
+    tag: Optional[str] = typer.Option(None, "--tag", "-t", help="Filter notes by tag."),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit the number of notes returned."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """List all notes, optionally filtered by tag and limited by count."""
+    try:
+        notes = list_notes(tag=tag, limit=limit)
+        if json:
+            console().print_json(data=[asdict(n) for n in notes])
+        else:
+            if notes:
+                console().print(f"[bold blue]Found {len(notes)} notes:[/bold blue]")
+                for note in notes:
+                    console().print(f"- [green]{note.title}[/green] (ID: {note.id})")
+                    console().print(f"  Tags: {', '.join(note.tags) if note.tags else 'None'}")
+                    console().print(f"  Updated: {note.updated_at.strftime('%Y-%m-%d %H:%M')}")
+            else:
+                console().print("[yellow]No notes found.[/yellow]")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@notes_app.command("search")
+def notes_search_cmd(
+    query: str = typer.Argument(..., help="Search query for title or content."),
+    tag: Optional[str] = typer.Option(None, "--tag", "-t", help="Filter search by tag."),
+    case_sensitive: bool = typer.Option(False, "--case-sensitive", "-c", help="Perform case-sensitive search."),
+    fuzzy: bool = typer.Option(False, "--fuzzy", "-f", help="Use fuzzy matching."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Search notes by query in title, content, or tags."""
+    try:
+        results = search_notes(query, tag_filter=tag, case_sensitive=case_sensitive, fuzzy=fuzzy)
+        if json:
+            console().print_json(data=[asdict(r) for r in results])
+        else:
+            if results:
+                console().print(f"[bold blue]Found {len(results)} matching notes:[/bold blue]")
+                for res in results:
+                    console().print(f"- [green]{res.note.title}[/green] (ID: {res.note.id})")
+                    console().print(f"  Score: {res.score:.2f}")
+                    if res.matches["title"]:
+                        console().print(f"  Title Matches: {res.matches['title'][0][:100]}...")
+                    if res.matches["content"]:
+                        console().print(f"  Content Matches: {res.matches['content'][0][:100]}...")
+                    if res.matches["tags"]:
+                        console().print(f"  Tag Matches: {', '.join(res.matches['tags'])}")
+                    console().print(f"  Updated: {res.note.updated_at.strftime('%Y-%m-%d %H:%M')}")
+            else:
+                console().print(f"[yellow]No notes found matching '{query}'.[/yellow]")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@notes_app.command("update")
+def notes_update_cmd(
+    note_id: str = typer.Argument(..., help="ID of the note to update."),
+    title: Optional[str] = typer.Option(None, "--title", help="New title for the note."),
+    content: Optional[str] = typer.Option(None, "--content", help="New content for the note (Markdown supported)."),
+    tags: Optional[str] = typer.Option(None, "--tag", "-t", help="New tags for the note (comma-separated)."),
+    json: bool = typer.Option(False, "--json", help="Raw JSON output."),
+) -> None:
+    """Update an existing note."""
+    try:
+        parsed_tags = [t.strip() for t in tags.split(',')] if tags else None
+        note = update_note(note_id, title, content, parsed_tags)
+        if note:
+            if json:
+                console().print_json(data=asdict(note))
+            else:
+                console().print(f"[green]✓ Note updated successfully:[/green] {note.title} (ID: {note.id})")
+                console().print(f"  Tags: {', '.join(note.tags) if note.tags else 'None'}")
+                console().print(f"  Updated: {note.updated_at}")
+        else:
+            console().print(f"[yellow]Note with ID '{note_id}' not found for update.[/yellow]")
+    except Exception as e:
+        console().print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@notes_app.command("delete")
+def notes_delete_cmd(
+    note_id: str = typer.Argument(..., help="ID of the note to delete."),
+) -> None:
+    """Delete a note by its ID."""
+    try:
+        success = delete_note(note_id)
+        if success:
+            console().print(f"[green]✓ Note with ID '{note_id}' deleted successfully.[/green]")
+        else:
+            console().print(f"[yellow]Note with ID '{note_id}' not found for deletion.[/yellow]")
     except Exception as e:
         console().print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
