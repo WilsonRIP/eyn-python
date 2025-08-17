@@ -11,6 +11,7 @@ from yt_dlp.utils import DownloadError
 from eyn_python.logging import get_logger
 from eyn_python.paths import ensure_dir, user_downloads_dir
 from eyn_python.config import DownloadSettings
+from eyn_python.download.progress import create_youtube_progress_hook
 
 log = get_logger(__name__)
 T = TypeVar("T")
@@ -29,30 +30,8 @@ def _get(settings: Any, name: str, default: T) -> T:
 
 
 def _progress_hook_factory() -> Callable[[Dict[str, Any]], None]:
-    def hook(d: Dict[str, Any]) -> None:
-        status = d.get("status")
-        if status == "downloading":
-            eta = d.get("eta")
-            speed = d.get("speed")
-            percent = d.get("_percent_str")
-            total = d.get("total_bytes") or d.get("total_bytes_estimate")
-            downloaded = d.get("downloaded_bytes")
-            log.info(
-                "  ".join(
-                    p for p in [
-                        "[dl]",
-                        f"{percent or ''}".strip(),
-                        f"{(speed or 0):.0f}B/s" if speed else "",
-                        f"ETA: {eta or '?'}",
-                        f"{(downloaded or 0)//(1024*1024)}MB/{(total or 0)//(1024*1024)}MB" if total else "",
-                    ] if p
-                )
-            )
-        elif status == "finished":
-            log.info("[dl] Merge/post-process...")
-        elif status == "error":
-            log.error("[dl] Post-process error")
-    return hook
+    """Create a progress hook for YouTube downloads with Rich progress bars."""
+    return create_youtube_progress_hook()
 
 
 def _detect_ffmpeg(ffmpeg_location: Optional[str]) -> None:

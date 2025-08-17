@@ -227,8 +227,9 @@ def dl_ig(
     Download a video from Instagram.
     """
     import asyncio
+    console().print(f"[blue]Downloading Instagram video...[/blue]")
     asyncio.run(download_instagram_video(url, out))
-    console().print(f"Video saved to {out}")
+    console().print(f"[green]✓ Video saved to {out}[/green]")
 
 @dl_app.command("tt")
 def dl_tt(
@@ -239,8 +240,9 @@ def dl_tt(
     Download a video from TikTok.
     """
     import asyncio
+    console().print(f"[blue]Downloading TikTok video...[/blue]")
     asyncio.run(download_tiktok_video(url, out))
-    console().print(f"Video saved to {out}")
+    console().print(f"[green]✓ Video saved to {out}[/green]")
 
 # Convenience alias: `eyn dl URL`
 @dl_app.callback(invoke_without_command=True)
@@ -1520,10 +1522,12 @@ def scrape_download_asset(
     out: Path = typer.Option(Path.cwd() / "out", "--out", "-o", help="Output directory."),
     json: bool = typer.Option(False, "--json", help="Raw JSON output."),
 ) -> None:
+    console().print(f"[blue]Downloading asset from {url}...[/blue]")
     dst = download_asset(url, out)
     data = {"path": str(dst)}
     from eyn_python.display import build_saved_panel, print_data
     print_data(data, build_saved_panel("Downloaded", str(dst)), json)
+    console().print(f"[green]✓ Asset saved to {dst}[/green]")
 
 
 @scrape_app.command("save")

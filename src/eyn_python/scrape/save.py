@@ -7,16 +7,17 @@ from typing import Dict
 import httpx
 
 from eyn_python.paths import ensure_dir
+from eyn_python.download.progress import download_with_progress
 
 
 def download_asset(url: str, out_dir: Path) -> Path:
     ensure_dir(out_dir)
     name = url.split("?")[0].split("#")[0].rstrip("/").split("/")[-1] or "index.html"
     dst = out_dir / name
-    with httpx.Client(follow_redirects=True, timeout=10.0) as c:
-        r = c.get(url)
-        r.raise_for_status()
-        dst.write_bytes(r.content)
+    
+    # Download with progress bar
+    download_with_progress(url, dst, name)
+    
     return dst
 
 
