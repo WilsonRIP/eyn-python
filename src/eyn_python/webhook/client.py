@@ -12,7 +12,7 @@ from ..api.client import APIClient, APIResponse
 @dataclass
 class WebhookClient:
     """Client for sending webhooks."""
-    default_headers: Dict[str, str] = None
+    default_headers: Optional[Dict[str, str]] = None
     timeout: float = 30.0
     retries: int = 3
     retry_delay: float = 1.0
@@ -36,7 +36,7 @@ class WebhookClient:
         """Send a webhook to the specified URL."""
         
         # Prepare headers
-        request_headers = self.default_headers.copy()
+        request_headers = self.default_headers.copy() if self.default_headers else {}
         if headers:
             request_headers.update(headers)
         
