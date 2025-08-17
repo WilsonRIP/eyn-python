@@ -14,6 +14,7 @@ from .thermal import temperatures_info
 from .ports import listening_ports
 from .net_ext import public_ip, http_latency
 from .tempfiles import TempCleanSettings, default_temp_dir, clean_temp
+from .color import random_hex_color
 
 __all__ = [
     "close_browsers",
@@ -31,6 +32,7 @@ __all__ = [
     "TempCleanSettings",
     "default_temp_dir",
     "clean_temp",
+    "random_hex_color",
 ]
 
 
